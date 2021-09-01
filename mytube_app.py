@@ -7,7 +7,6 @@ import os
 import threading
 from difflib import SequenceMatcher
 from pathlib import Path
-
 os.system('pip install pytube')
 os.system('pip install requests-html')
 os.system('pip install requests-html --upgrade')
@@ -17,7 +16,7 @@ from requests_html import HTMLSession
 
 
 
-WINDOW_HEIGHT = 400
+WINDOW_HEIGHT = 300
 WINDOW_WIDTH = 500
 LABEL_WIDTH = 15
 STANDARD_FONT = (14)
@@ -174,7 +173,7 @@ class VideoTab:
         url = self.validate.validate_url(self.stringvars['url'].get())
         downloader = VideoDownloader(
             url=url, 
-            save_directory=self.validate.validate_save_directory(options.get_save_dir(), ['Videos']),
+            save_directory=self.validate.validate_save_directory(options.get_save_dir(), []),
             resolution=options.get_resolution()
             )
         downloader.set_output_filename(filename)
@@ -460,7 +459,7 @@ class PlaylistTab:
 
     def download_playlist(self):
         playlist = Playlist(self.stringvars['url'].get())
-        if playlist._initial_data is None:
+        if len(playlist.videos) == 0:
             self.messages.invalid_playlist_url()
             return
 
@@ -557,8 +556,6 @@ class VideoDownloader:
             self.resolution = Resolution().downgrade(self.resolution)
             self.download_video()
             
-
-
 
 class Messages:
     def download_complete(self):
