@@ -5,9 +5,13 @@ from tkinter import ttk, messagebox
 from tkinter.filedialog import askdirectory
 import os
 import threading
-from pytube import Playlist, YouTube, Channel
-from requests_html import HTMLSession
 from difflib import SequenceMatcher
+os.system('pip install pytube')
+os.system('pip install requests-html')
+os.system('pip install requests-html --upgrade')
+os.system('pip install pytube --upgrade')
+from pytube import Playlist, YouTube, Channel
+from requests_html import HTMLSession    
 
 
 
