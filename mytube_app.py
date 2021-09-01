@@ -6,11 +6,13 @@ from tkinter.filedialog import askdirectory
 import os
 import threading
 from difflib import SequenceMatcher
-os.system('pip install pytube')
-os.system('pip install requests-html')
-os.system('pip install requests-html --upgrade')
-os.system('pip install pytube --upgrade')
-from pytube import Playlist, YouTube, Channel
+from pathlib import Path
+
+# os.system('pip install pytube')
+# os.system('pip install requests-html')
+# os.system('pip install requests-html --upgrade')
+# os.system('pip install pytube --upgrade')
+from pytube import Playlist, YouTube, Channel, exceptions
 from requests_html import HTMLSession    
 
 
@@ -78,6 +80,7 @@ class App:
 class OptionsTab:
     def __init__(self, frame: Frame) -> None:
         self.frame = frame
+        self.messages = Messages()
         self.root = root
         self.res_elements = {}
         self.dir_elements = {}
@@ -118,7 +121,7 @@ class OptionsTab:
     def get_save_dir(self):
         save_dir = self.stringvars.get('directory').get()
         if save_dir == None or save_dir.strip() == '':
-            messagebox.showerror(title='Save directory error', message='Please enter a valid save directory.')
+            self.messages.invalid_save_dir()
             return
         return save_dir
         
@@ -126,6 +129,8 @@ class OptionsTab:
 class VideoTab:
     def __init__(self, frame: Frame, options: OptionsTab) -> None:
         self.frame = frame
+        self.validate = Validate()
+        self.messages = Messages()
         self.url = ''
         self.output_filename = None
         self.dl_button = None
@@ -154,13 +159,6 @@ class VideoTab:
     def _start_video_download(self):
         thread = threading.Thread(target=self.download)
         thread.start()
-        messagebox.showinfo(title='Complete', message='Download complete!')
-
-    def _validate_url(self, url: str):
-        if url == '' or url is None:
-            messagebox.showerror(title='No URL found', message='Please enter a valid YouTube URL')
-            return
-        return url
 
     def _build(self):
         self.url_elements.get('label').grid(column=0, row=0, sticky=W, padx=10, pady=15)
@@ -173,20 +171,26 @@ class VideoTab:
 
     def download(self):    
         filename = self.stringvars['filename'].get()
-        url = self._validate_url(self.stringvars['url'].get())
+        url = self.validate.validate_url(self.stringvars['url'].get())
         downloader = VideoDownloader(
             url=url, 
-            save_directory=options.get_save_dir(),
+            save_directory=self.validate.validate_save_directory(options.get_save_dir(), ['Videos']),
             resolution=options.get_resolution()
             )
         downloader.set_output_filename(filename)
         downloader.add_resolution_prefix()
-        downloader.download_video()
+        try:
+            downloader.download_video()
+        except exceptions.RegexMatchError:
+            return Messages().invalid_video_url()
+        self.messages.download_complete()
 
 
 class ChannelTab:
     def __init__(self, frame: Frame, options: OptionsTab) -> None:
         self.frame = frame
+        self.validate = Validate()
+        self.messages = Messages()
         self.output_filename = None
         self.a_tags = None
         self.dl_button = None
@@ -228,18 +232,10 @@ class ChannelTab:
     def _generate_download_button(self):
         self.dl_button = Button(self.frame, text='DOWNLOAD', bg=DOWNLOAD_BUTTON_COLOR, height=DOWNLOAD_BUTTON_HEIGHT, width=DOWNLOAD_BUTTON_WIDTH, command=self._start_channel_download)
 
-    def _validate_channel_name(self, channel_name: str):
-        '''
-        Returns a string without whitespace.
-        To prevent user from downloading the wrong channel, e.g. the channel 'tech', when searching for channel name 'tech tips'.
-        '''
-        return channel_name.replace(' ', '').strip()
-
     def _start_channel_download(self):
         '''Starts a new thread for channel download.'''
         thread = threading.Thread(target=self.download_channel)
         thread.start()
-        messagebox.showinfo(title='Complete', message='Download complete!')
 
     def _build(self):
         '''Places all the elements in the grid. Seperated from instancing for better overview.'''
@@ -320,25 +316,33 @@ class ChannelTab:
         Downloads any videos from the channel which meets the conditions given.
         '''
         if self.stringvars['channel name'].get() == '':
-            messagebox.showerror(title='Channel name error', message='Please enter a Youtube channel name')
+            self.messages.invalid_channel_name()
             return
-        channel_name = self._validate_channel_name(self.stringvars['channel name'].get())
-        filtered_videos = self.filter_channel_videos(channel=Channel(f"https://www.youtube.com/c/{channel_name}"))
+        channel_name = self.validate.validate_channel_name(self.stringvars['channel name'].get())
+        channel = Channel(f"https://www.youtube.com/c/{channel_name}")
+        if len(channel.videos) == 0:
+            self.messages.invalid_channel_name()
+            return
+        filtered_videos = self.filter_channel_videos(channel)
 
         for video in filtered_videos:
             downloader = VideoDownloader(
                 url=video.watch_url, 
                 resolution=options.get_resolution(), 
-                save_directory=f'{options.get_save_dir()}\\{video.author}'
+                save_directory=self.validate.validate_save_directory(options.get_save_dir(), [video.author])
                 )
             downloader.add_resolution_prefix()
             downloader.download_video()
+        
+        self.messages.download_complete()
 
 
 class PlaylistTab:
     def __init__(self, frame: Frame, options: OptionsTab) -> None:
         self.url_frame = Frame(frame, width=WINDOW_WIDTH, height=WINDOW_HEIGHT/2)
         self.playlist_frame = Frame(frame, width=WINDOW_WIDTH, height=WINDOW_HEIGHT/2)
+        self.validate = Validate() 
+        self.messages = Messages()
         self.output_filename = None
         self.a_tags = None
         self.url_elements = {}
@@ -386,14 +390,17 @@ class PlaylistTab:
         '''Starts a new thread for channel download.'''
         thread = threading.Thread(target=self.download_playlist)
         thread.start()
-        messagebox.showinfo(title='Complete', message='Download complete!')
 
     def _start_channel_playlist_download(self):
         '''Starts a new thread for channel download.'''
+        if self.stringvars['channel name'].get() == '':
+            self.messages.invalid_channel_name()
+        user_accept = self.messages.unstable_warning()
+        if not user_accept:
+            return
         self._get_playlist_atags()
         thread = threading.Thread(target=self.download_channel_playlist)
         thread.start()
-        messagebox.showinfo(title='Complete', message='Download complete!')
 
     def _build(self):
         '''Places all the elements in the grid. Seperated from instancing for better overview.'''
@@ -431,10 +438,7 @@ class PlaylistTab:
 
     def _suggest_playlist(self, playlist: Playlist):
         '''Suggest a playlist to user.'''
-        return messagebox.askyesno(
-            title='Suggest close match', 
-            message=f'Found the playlist called {playlist.title}\nThe name looks similar to what you were looking for!\nDo you want to download it?'
-            )
+        return self.messages.suggest_playlist(playlist)
 
     def find_playlist(self):
         '''Returns the Playlist object of it matches the playlist name, the user is looking for.'''
@@ -451,38 +455,42 @@ class PlaylistTab:
                     accept_suggestion = self._suggest_playlist(playlist)
                     if accept_suggestion:
                         return playlist
-            messagebox.showerror(
-                title='Channel playlists not found',
-                message='Channel playlists not found.\nPlease that the channel name is correct.'
-            )
+            self.messages.channel_playlist_not_found()
             return None
 
     def download_playlist(self):
         playlist = Playlist(self.stringvars['url'].get())
+        if playlist._initial_data is None:
+            self.messages.invalid_playlist_url()
+            return
+
         for video in playlist.videos:
             downloader = VideoDownloader(
                 url=video.watch_url, 
                 resolution=options.get_resolution(), 
-                save_directory=f'{options.get_save_dir()}\\{video.author}\\{playlist.title}'
+                save_directory=self.validate.validate_save_directory(options.get_save_dir(), [video.author, playlist.title])
                 )
             downloader.add_resolution_prefix()
             downloader.download_video()
+        
+        self.messages.download_complete()
     
     def download_channel_playlist(self):
         relevant_playlist = self.find_playlist()
         if relevant_playlist is None:
             # Either wrong channel name or channel has no playlists
             return
-            
         
         for video in relevant_playlist.videos:
             downloader = VideoDownloader(
                 url=video.watch_url, 
                 resolution=options.get_resolution(), 
-                save_directory=f'{options.get_save_dir()}\\{video.author}'
+                save_directory=self.validate.validate_save_directory(options.get_save_dir(), [video.author])
                 )
             downloader.add_resolution_prefix()
             downloader.download_video()
+        
+        self.messages.download_complete()
 
 
 class VideoDownloader:
@@ -512,7 +520,7 @@ class VideoDownloader:
     
     def set_save_directory(self, save_directory: str):
         self.save_directory = save_directory
-
+    
     def get_possible_resolutions(self, streams):
         possible_resolutions = []
         for stream in streams.filter(type='mp4'):
@@ -548,7 +556,84 @@ class VideoDownloader:
             # The resolution wanted, was not available. Reducing to the next available resolution and retry.
             self.resolution = Resolution().downgrade(self.resolution)
             self.download_video()
-        
+            
+
+
+
+class Messages:
+    def download_complete(self):
+        t = 'Complete'
+        m = 'Download complete!'
+        return messagebox.showinfo(title=t, message=m)
+    
+    def invalid_channel_name(self):
+        t = 'Invalid channel name'
+        m = 'Please enter a valid Youtube channel name'
+        return messagebox.showerror(title=t, message=m)
+
+    def invalid_playlist_url(self):
+        t = 'Invalid URL'
+        m = 'Please enter a valid Youtube playlist URL'
+        return messagebox.showerror(title=t, message=m)
+ 
+    def channel_playlist_not_found(self):
+        t = 'Playlist Error'
+        m = 'Channel playlists not found'
+        return messagebox.showerror(title=t, message=m)
+
+    def invalid_video_url(self):
+        t = 'Invalid URL'
+        m = 'Please enter a valid YouTube URL'
+        return messagebox.showerror(title=t, message=t)
+
+
+    def invalid_save_dir(self):
+        t = 'Invalid directory'
+        m = 'Please enter a valid save directory'
+        return messagebox.showerror(title=t, message=m)
+
+    def unstable_warning(self):
+        t = 'Unstable'
+        m = 'WARNING!\nThis method is slow and prone to crashes.\n\nIt is highly recommended to use the playlist URLfunction instead.\n\nDo you want to continue anyways?'
+        return messagebox.askyesno(title=t, message=m)
+
+    def suggest_playlist(self, playlist: Playlist):
+        t = 'Suggestion'
+        m = f'Found the playlist called {playlist.title}\nThe name looks similar to what you were looking for!\nDo you want to download it?'
+        return messagebox.askyesno(title=t, message=m)
+
+
+class Validate:
+    def _delete_special_chars(self, text: str):
+        special_chars = ['\\', '/', '|', ':', '&', '*', '?', '>', '<']
+        for char in special_chars:
+            text = text.replace(char, '')
+        return text
+
+    def validate_save_directory(self, base_save_dir: str, subfolders: list):
+        validated_subfolders = []
+        for subfolder in subfolders:
+            validated_subfolders.append(self._delete_special_chars(subfolder))
+
+        validated_subfolders = '/'.join(validated_subfolders)
+        path = Path(base_save_dir).joinpath(validated_subfolders)
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    
+    def validate_channel_name(self, channel_name: str):
+        '''
+        Returns a string without whitespace.
+        To prevent user from downloading the wrong channel, e.g. the channel 'tech', when searching for channel name 'tech tips'.
+        '''
+        return channel_name.replace(' ', '').strip()
+
+
+    def validate_url(self, url: str):
+        if url == '' or url is None:
+            return Messages().invalid_video_url()
+        return url
+
 
 root = Tk()
 app = App(root)
