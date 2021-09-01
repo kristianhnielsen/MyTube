@@ -8,10 +8,10 @@ import threading
 from difflib import SequenceMatcher
 from pathlib import Path
 
-# os.system('pip install pytube')
-# os.system('pip install requests-html')
-# os.system('pip install requests-html --upgrade')
-# os.system('pip install pytube --upgrade')
+os.system('pip install pytube')
+os.system('pip install requests-html')
+os.system('pip install requests-html --upgrade')
+os.system('pip install pytube --upgrade')
 from pytube import Playlist, YouTube, Channel, exceptions
 from requests_html import HTMLSession    
 
