@@ -11,10 +11,8 @@ os.system('pip install pytube')
 os.system('pip install requests-html')
 os.system('pip install requests-html --upgrade')
 os.system('pip install pytube --upgrade')
-from pytube import Playlist, YouTube, Channel, exceptions
+from pytube import Playlist, YouTube, Channel, exceptions, request
 from requests_html import HTMLSession    
-
-
 
 WINDOW_HEIGHT = 300
 WINDOW_WIDTH = 500
@@ -77,8 +75,8 @@ class App:
 
 
 class OptionsTab:
-    def __init__(self, frame: Frame) -> None:
-        self.frame = frame
+    def __init__(self, app: App) -> None:
+        self.frame = app.tabs.get('Options')
         self.messages = Messages()
         self.root = root
         self.res_elements = {}
@@ -126,8 +124,10 @@ class OptionsTab:
         
    
 class VideoTab:
-    def __init__(self, frame: Frame, options: OptionsTab) -> None:
-        self.frame = frame
+    def __init__(self, app: App, options: OptionsTab) -> None:
+        self.frame = app.tabs.get('Video')
+        self.root = app.root
+        self.options = options
         self.validate = Validate()
         self.messages = Messages()
         self.url = ''
@@ -168,26 +168,31 @@ class VideoTab:
         
         self.dl_button.grid(column=1, row=2, pady=10)
 
-    def download(self):    
+    def download(self):
+        progress_bar = ProgressBar(self.root)
         filename = self.stringvars['filename'].get()
         url = self.validate.validate_url(self.stringvars['url'].get())
         downloader = VideoDownloader(
             url=url, 
-            save_directory=self.validate.validate_save_directory(options.get_save_dir(), []),
-            resolution=options.get_resolution()
+            save_directory=self.validate.validate_save_directory(self.options.get_save_dir(), []),
+            resolution=self.options.get_resolution(),
             )
+        progress_bar.update_status_downloading(1, 1)
+        downloader.set_progress_bar(progress_bar)
         downloader.set_output_filename(filename)
         downloader.add_resolution_prefix()
         try:
             downloader.download_video()
         except exceptions.RegexMatchError:
             return Messages().invalid_video_url()
+        progress_bar.kill()
         self.messages.download_complete()
 
 
 class ChannelTab:
-    def __init__(self, frame: Frame, options: OptionsTab) -> None:
-        self.frame = frame
+    def __init__(self, app: App, options: OptionsTab) -> None:
+        self.frame = app.tabs.get('Channel')
+        self.root = app.root
         self.validate = Validate()
         self.messages = Messages()
         self.output_filename = None
@@ -314,32 +319,39 @@ class ChannelTab:
         Primary method of this class.
         Downloads any videos from the channel which meets the conditions given.
         '''
+        progress_bar = ProgressBar(self.root)
         if self.stringvars['channel name'].get() == '':
             self.messages.invalid_channel_name()
             return
+        progress_bar.update_status('Searching for channel')
         channel_name = self.validate.validate_channel_name(self.stringvars['channel name'].get())
         channel = Channel(f"https://www.youtube.com/c/{channel_name}")
         if len(channel.videos) == 0:
             self.messages.invalid_channel_name()
             return
+        progress_bar.update_status('Looking for videos')
         filtered_videos = self.filter_channel_videos(channel)
-
-        for video in filtered_videos:
+        
+        for index, video in enumerate(filtered_videos):
+            progress_bar.update_status_downloading(index, len(filtered_videos))
             downloader = VideoDownloader(
                 url=video.watch_url, 
                 resolution=options.get_resolution(), 
                 save_directory=self.validate.validate_save_directory(options.get_save_dir(), [video.author])
                 )
+            downloader.set_progress_bar(progress_bar)
             downloader.add_resolution_prefix()
             downloader.download_video()
         
+        progress_bar.kill()
         self.messages.download_complete()
 
 
 class PlaylistTab:
-    def __init__(self, frame: Frame, options: OptionsTab) -> None:
-        self.url_frame = Frame(frame, width=WINDOW_WIDTH, height=WINDOW_HEIGHT/2)
-        self.playlist_frame = Frame(frame, width=WINDOW_WIDTH, height=WINDOW_HEIGHT/2)
+    def __init__(self, app: App, options: OptionsTab) -> None:
+        self.root = app.root
+        self.url_frame = Frame(app.tabs.get('Playlist'), width=WINDOW_WIDTH, height=WINDOW_HEIGHT/2)
+        self.playlist_frame = Frame(app.tabs.get('Playlist'), width=WINDOW_WIDTH, height=WINDOW_HEIGHT/2)
         self.validate = Validate() 
         self.messages = Messages()
         self.output_filename = None
@@ -458,47 +470,113 @@ class PlaylistTab:
             return None
 
     def download_playlist(self):
+        progress_bar = ProgressBar(self.root)
+        progress_bar.update_status('Searching for playlist')
         playlist = Playlist(self.stringvars['url'].get())
+
+        progress_bar.update_status('Finding videos in playlist')
         if len(playlist.videos) == 0:
             self.messages.invalid_playlist_url()
             return
 
-        for video in playlist.videos:
+        for index, video in enumerate(playlist.videos):
+            progress_bar.update_status_downloading(index, len(playlist.videos))
             downloader = VideoDownloader(
                 url=video.watch_url, 
                 resolution=options.get_resolution(), 
                 save_directory=self.validate.validate_save_directory(options.get_save_dir(), [video.author, playlist.title])
                 )
+            downloader.set_progress_bar(progress_bar)
             downloader.add_resolution_prefix()
             downloader.download_video()
         
+        progress_bar.kill()
         self.messages.download_complete()
     
     def download_channel_playlist(self):
+        progress_bar = ProgressBar(self.root)
+        progress_bar.update_status('Searching for playlist')
         relevant_playlist = self.find_playlist()
+        
+        progress_bar.update_status('Finding videos in playlist')
         if relevant_playlist is None:
             # Either wrong channel name or channel has no playlists
             return
         
-        for video in relevant_playlist.videos:
+        for index, video in enumerate(relevant_playlist.videos):
+            progress_bar.update_status_downloading(index, len(playlist.videos))
             downloader = VideoDownloader(
                 url=video.watch_url, 
                 resolution=options.get_resolution(), 
                 save_directory=self.validate.validate_save_directory(options.get_save_dir(), [video.author])
                 )
+            downloader.set_progress_bar(progress_bar)
             downloader.add_resolution_prefix()
             downloader.download_video()
         
+        progress_bar.kill()
         self.messages.download_complete()
+
+
+class ProgressBar:
+    def __init__(self, root: Tk) -> None:
+        self.top = Toplevel(root)
+        self.video_name = StringVar()
+        self.status = StringVar()
+        self.download_percentage = StringVar()
+        
+        self._setup_window()
+        self.bar = ttk.Progressbar(self.top, orient=HORIZONTAL, length=100, mode='determinate')
+        self.video_name_label = Label(self.top, textvariable=self.video_name)
+        self.status_label = Label(self.top, textvariable=self.status)
+        self.download_percentage_label = Label(self.top, textvariable=self.download_percentage)
+        self.update_status('Getting ready...')
+        self._update_download_percent(0.0)
+        self.cancel_button = Button(self.top, text='Cancel', command=self.top.destroy)
+        self._build()
+    
+    def _build(self):
+        self.video_name_label.pack(expand=True, fill='both', pady=5, padx=10, anchor=NW)
+        self.status_label.pack(expand=True, fill='both', pady=5, padx=10, anchor=N)
+        self.bar.pack(expand=True, pady=10, fill='both', padx=15)
+        self.download_percentage_label.pack(expand=True, fill='both', pady=5, padx=10, anchor=N)
+        self.cancel_button.pack(expand=True, pady=15)
+
+    def _setup_window(self):
+        self.top.title("Progress")
+        self.window_width = 400
+        self.window_height = 200
+        self.top.geometry(f'{self.window_width}x{self.window_height}')
+
+    def update_video_name(self, name: str):
+        self.video_name.set(name)
+
+    def update_status_downloading(self, item_num: int, total_item_num: int):
+        self.update_status(f'Downloading video {item_num} of {total_item_num}')
+
+    def update_status(self, new_status: str):
+        self.status.set(new_status)
+
+    def _update_download_percent(self, dl_percent: float):
+        self.download_percentage.set(f'{dl_percent:.2f}%')
+
+    def update_progress(self, percent: float):
+        self.bar['value'] = percent
+        self._update_download_percent(percent)
+
+    def kill(self):
+        self.top.destroy()
 
 
 class VideoDownloader:
     def __init__(self, url: str, save_directory=os.getcwd(), resolution=Resolution().default_res) -> None:
         self.url = url
+        self.progress_bar = None
         self.resolution = resolution
         self.output_filename = None
         self.save_directory = save_directory
         self.resolution_prefix = False
+        self.percent_downloaded = 0
     
     def _validate_filename(self):
         if self.output_filename.strip() == '':
@@ -507,6 +585,16 @@ class VideoDownloader:
             self.output_filename += '.mp4'
         return self.output_filename
 
+    def _call_on_progress_each_MB(self, MB: int):
+        # on_progress_callback called every X MB downloaded
+        request.default_range_size = 1048576 * MB 
+
+    def progress_check(self, stream=None, chunk = None, remaining = None):
+        # Gets the percentage of the file that has been downloaded.
+        percent_downloaded = (100*(stream.filesize - remaining))/stream.filesize
+        self.progress_bar.update_progress(percent_downloaded)
+        self.progress_bar.update_video_name(f'Video: {self.currently_downloading_title}')
+        
     def add_resolution_prefix(self):
         self.resolution_prefix = True
     
@@ -531,8 +619,13 @@ class VideoDownloader:
 
         return possible_resolutions
 
+    def set_progress_bar(self, bar: ProgressBar):
+        self.progress_bar = bar
+
     def download_video(self):
-        video = YouTube(url=self.url)
+        self._call_on_progress_each_MB(1)
+        video = YouTube(url=self.url, on_progress_callback=self.progress_check)
+        self.currently_downloading_title = video.title
         if self.resolution is None:
             return
 
@@ -546,7 +639,6 @@ class VideoDownloader:
                 res=self.resolution,
                 progressive=True
                 ).first()
-
             stream.download(
                             output_path=self.save_directory,
                             filename_prefix=prefix
@@ -555,7 +647,7 @@ class VideoDownloader:
             # The resolution wanted, was not available. Reducing to the next available resolution and retry.
             self.resolution = Resolution().downgrade(self.resolution)
             self.download_video()
-            
+
 
 class Messages:
     def download_complete(self):
@@ -635,9 +727,9 @@ class Validate:
 root = Tk()
 app = App(root)
 
-options = OptionsTab(frame=app.tabs.get('Options'))
-video = VideoTab(frame=app.tabs.get('Video'), options=options)
-channel = ChannelTab(frame=app.tabs.get('Channel'), options=options)
-playlist = PlaylistTab(frame=app.tabs.get('Playlist'), options=options)
+options = OptionsTab(app)
+video = VideoTab(app, options=options)
+channel = ChannelTab(app, options=options)
+playlist = PlaylistTab(app, options=options)
 
 root.mainloop()
