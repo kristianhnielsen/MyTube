@@ -2,6 +2,8 @@ from datetime import datetime
 import re
 from tkinter import *
 from tkinter import ttk, messagebox
+from urllib.error import HTTPError
+import webbrowser
 from tkinter.filedialog import askdirectory
 import os
 import threading
@@ -46,7 +48,7 @@ class App:
         self.root = root
         self._root_setup()
         self._tabs_setup()
-        self._generate_tabs(['Video', 'Channel', 'Playlist', 'Options'])
+        self._generate_tabs(['Video', 'Channel', 'Playlist', 'Options', 'About'])
         self.options = {
             'resolution' : '',
             'dir' : ''
@@ -322,16 +324,29 @@ class ChannelTab:
         progress_bar = ProgressBar(self.root)
         if self.stringvars['channel name'].get() == '':
             self.messages.invalid_channel_name()
+            progress_bar.kill()
             return
         progress_bar.update_status('Searching for channel')
         channel_name = self.validate.validate_channel_name(self.stringvars['channel name'].get())
         channel = Channel(f"https://www.youtube.com/c/{channel_name}")
-        if len(channel.videos) == 0:
-            self.messages.invalid_channel_name()
-            return
+
+        try:
+            if len(channel.videos) == 0:
+                self.messages.invalid_channel_name()
+                progress_bar.kill()
+                return
+        except HTTPError:
+            self.messages.connection_error()
+            progress_bar.kill()
+            return 
+
         progress_bar.update_status('Looking for videos')
         filtered_videos = self.filter_channel_videos(channel)
-        
+        if len(filtered_videos) == 0:
+            progress_bar.kill()
+            self.messages.no_videos_found()
+            return 
+
         for index, video in enumerate(filtered_videos):
             progress_bar.update_status_downloading(index, len(filtered_videos))
             downloader = VideoDownloader(
@@ -501,6 +516,7 @@ class PlaylistTab:
         progress_bar.update_status('Finding videos in playlist')
         if relevant_playlist is None:
             # Either wrong channel name or channel has no playlists
+            progress_bar.kill()
             return
         
         for index, video in enumerate(relevant_playlist.videos):
@@ -516,6 +532,37 @@ class PlaylistTab:
         
         progress_bar.kill()
         self.messages.download_complete()
+
+
+class AboutTab:
+    def __init__(self, app: App) -> None:
+        self.frame = app.tabs.get('About')
+        self.root = app.root
+        self.messages = Messages()
+        self.stringvars = {
+            'about' : StringVar(),
+            'filename' : StringVar()
+        }
+        self.elements = {}
+        self._generate_elements()
+        self._build()
+    
+    def _generate_elements(self):
+        self.elements['about'] = Label(self.frame, text='About')
+        self.elements['disclaimer'] = Label(self.frame, text='This software is only for educational use.\nThe author takes no responsibility for downloading unauthorized content.')
+        self.elements['github'] = Label(self.frame, text='Github', fg="blue", cursor="hand2")
+        self.elements['license'] = Label(self.frame, text='License', fg="blue", cursor="hand2")
+
+    def _open_hyperlink(self, url: str):
+        webbrowser.open_new(url)
+
+    def _build(self):
+        self.elements['about'].pack(fill='x', pady=10)
+        self.elements['disclaimer'].pack(fill='x', pady=10)
+        self.elements['github'].pack(fill='none', pady=10)
+        self.elements['license'].pack(fill='none', pady=10)
+        self.elements['github'].bind('<Button-1>', lambda e: self._open_hyperlink("https://github.com/kristianhnielsen/MyTube"))
+        self.elements['license'].bind('<Button-1>', lambda e: self._open_hyperlink("https://github.com/kristianhnielsen/MyTube/blob/main/LICENSE"))
 
 
 class ProgressBar:
@@ -552,18 +599,24 @@ class ProgressBar:
         self.video_name.set(name)
 
     def update_status_downloading(self, item_num: int, total_item_num: int):
-        self.update_status(f'Downloading video {item_num} of {total_item_num}')
+        if self.download_percentage.get() == "100%":
+            self.update_status('Download complete\nPreparing for the next download!')
+        else:  
+            self.update_status(f'Downloading video {item_num + 1} of {total_item_num}')
 
     def update_status(self, new_status: str):
         self.status.set(new_status)
 
     def _update_download_percent(self, dl_percent: float):
-        self.download_percentage.set(f'{dl_percent:.2f}%')
+        if dl_percent == 100.0:
+            self.download_percentage.set('100%')
+            return
+        self.download_percentage.set(f'{dl_percent:.1f}%')
 
     def update_progress(self, percent: float):
         self.bar['value'] = percent
         self._update_download_percent(percent)
-
+       
     def kill(self):
         self.top.destroy()
 
@@ -633,7 +686,6 @@ class VideoDownloader:
         if self.resolution_prefix:
             prefix = f'[{self.resolution}] '
         try:
-            # Choose 60fps over 30fps if available
             stream = video.streams.filter(
                 type='video',
                 res=self.resolution,
@@ -647,6 +699,11 @@ class VideoDownloader:
             # The resolution wanted, was not available. Reducing to the next available resolution and retry.
             self.resolution = Resolution().downgrade(self.resolution)
             self.download_video()
+        except TclError:
+            # Download was stopped unexpectedly (probably manually)
+            # Delete current file, as the download is incomplete
+            Messages().download_stopped()
+            os.unlink(stream.get_file_path(output_path=self.save_directory, filename_prefix=prefix))
 
 
 class Messages:
@@ -654,6 +711,21 @@ class Messages:
         t = 'Complete'
         m = 'Download complete!'
         return messagebox.showinfo(title=t, message=m)
+    
+    def no_videos_found(self):
+        t = 'No videos'
+        m = 'Could not find any new videos matching the requirements'
+        return messagebox.showerror(title=t, message=m)
+    
+    def download_stopped(self):
+        t = 'Download stopped'
+        m = 'Current download has stopped unexpectedly'
+        return messagebox.showerror(title=t, message=m)
+   
+    def connection_error(self):
+        t = 'Connection error'
+        m = 'Something went wrong\nPlease check your internet connection and try again'
+        return messagebox.showerror(title=t, message=m)
     
     def invalid_channel_name(self):
         t = 'Invalid channel name'
@@ -731,5 +803,6 @@ options = OptionsTab(app)
 video = VideoTab(app, options=options)
 channel = ChannelTab(app, options=options)
 playlist = PlaylistTab(app, options=options)
+about = AboutTab(app)
 
 root.mainloop()
