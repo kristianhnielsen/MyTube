@@ -44,7 +44,6 @@ class Resolution:
 class App:
     def __init__(self, root) -> None:
         self.root = root
-        self._root_setup()
         self._tabs_setup()
         self._generate_tabs(['Video', 'Channel', 'Playlist', 'Options', 'About'])
         self.options = {
@@ -52,12 +51,6 @@ class App:
             'dir' : ''
         }
         self._build_tabs()
-
-    def _root_setup(self):
-        self.root.title('MyTube')
-        self.root.geometry(f'{WINDOW_WIDTH}x{WINDOW_HEIGHT}')
-        self.root.maxsize(width=WINDOW_WIDTH, height=WINDOW_HEIGHT)
-        self.root.minsize(width=WINDOW_WIDTH, height=WINDOW_HEIGHT)
 
     def _tabs_setup(self):
         self.notebook = ttk.Notebook(self.root)
@@ -809,17 +802,17 @@ class Validate:
         '''
         return channel_name.replace(' ', '').strip()
 
-def main():
-    root = tk.Tk()
-    app = App(root)
+root = tk.Tk()
+root.title('MyTube')
+root.geometry(f'{WINDOW_WIDTH}x{WINDOW_HEIGHT}')
+root.maxsize(width=WINDOW_WIDTH, height=WINDOW_HEIGHT)
+root.minsize(width=WINDOW_WIDTH, height=WINDOW_HEIGHT)
+app = App(root)
 
-    options = OptionsTab(app)
-    video = VideoTab(app, options=options)
-    channel = ChannelTab(app, options=options)
-    playlist = PlaylistTab(app, options=options)
-    about = AboutTab(app)
+options = OptionsTab(app)
+video = VideoTab(app, options=options)
+channel = ChannelTab(app, options=options)
+playlist = PlaylistTab(app, options=options)
+about = AboutTab(app)
 
-    root.mainloop()
-
-if __name__ == '__main__':
-    main()
+root.mainloop()
