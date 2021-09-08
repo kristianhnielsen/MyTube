@@ -12,12 +12,6 @@ from pathlib import Path
 import helium
 from bs4 import BeautifulSoup
 from time import sleep
-
-
-# os.system('pip install pytube')
-# os.system('pip install requests-html')
-# os.system('pip install requests-html --upgrade')
-# os.system('pip install pytube --upgrade')
 from pytube import Playlist, YouTube, Channel, request, exceptions
 
 WINDOW_HEIGHT = 300
@@ -815,15 +809,17 @@ class Validate:
         '''
         return channel_name.replace(' ', '').strip()
 
+def main():
+    root = tk.Tk()
+    app = App(root)
 
+    options = OptionsTab(app)
+    video = VideoTab(app, options=options)
+    channel = ChannelTab(app, options=options)
+    playlist = PlaylistTab(app, options=options)
+    about = AboutTab(app)
 
-root = tk.Tk()
-app = App(root)
+    root.mainloop()
 
-options = OptionsTab(app)
-video = VideoTab(app, options=options)
-channel = ChannelTab(app, options=options)
-playlist = PlaylistTab(app, options=options)
-about = AboutTab(app)
-
-root.mainloop()
+if __name__ == '__main__':
+    main()
