@@ -1,20 +1,24 @@
 from datetime import datetime
 import re
-from tkinter import *
+import tkinter as tk
 from tkinter import ttk, messagebox
 from urllib.error import HTTPError
 import webbrowser
 from tkinter.filedialog import askdirectory
 import os
-import threading
+from threading import Thread
 from difflib import SequenceMatcher
 from pathlib import Path
-os.system('pip install pytube')
-os.system('pip install requests-html')
-os.system('pip install requests-html --upgrade')
-os.system('pip install pytube --upgrade')
-from pytube import Playlist, YouTube, Channel, exceptions, request
-from requests_html import HTMLSession    
+import helium
+from bs4 import BeautifulSoup
+from time import sleep
+
+
+# os.system('pip install pytube')
+# os.system('pip install requests-html')
+# os.system('pip install requests-html --upgrade')
+# os.system('pip install pytube --upgrade')
+from pytube import Playlist, YouTube, Channel, request, exceptions
 
 WINDOW_HEIGHT = 300
 WINDOW_WIDTH = 500
@@ -68,7 +72,7 @@ class App:
     def _generate_tabs(self, tab_names: list):
         self.tabs = {}
         for tab_name in tab_names:
-            self.tabs[tab_name] = Frame(self.notebook, width=WINDOW_WIDTH, height=WINDOW_HEIGHT)
+            self.tabs[tab_name] = tk.Frame(self.notebook, width=WINDOW_WIDTH, height=WINDOW_HEIGHT)
 
     def _build_tabs(self):
         for name, frame in self.tabs.items():
@@ -84,8 +88,8 @@ class OptionsTab:
         self.res_elements = {}
         self.dir_elements = {}
         self.stringvars = {
-            'resolution' : StringVar(),
-            'directory' : StringVar()
+            'resolution' : tk.StringVar(),
+            'directory' : tk.StringVar()
         }
         self._generate_resolution_elements()
         self._generate_save_dir_elements()
@@ -97,22 +101,22 @@ class OptionsTab:
     def _generate_resolution_elements(self):
         _resolution_options = Resolution().options
         self.stringvars['resolution'].set(Resolution().default_res)
-        self.res_elements['label'] = Label(self.frame, text='Preferred resolution', width=LABEL_WIDTH)
-        self.res_elements['button'] = OptionMenu(self.frame, self.stringvars.get('resolution'), *_resolution_options)
+        self.res_elements['label'] = tk.Label(self.frame, text='Preferred resolution', width=LABEL_WIDTH)
+        self.res_elements['button'] = tk.OptionMenu(self.frame, self.stringvars.get('resolution'), *_resolution_options)
 
     def _generate_save_dir_elements(self):
         self.stringvars['directory'].set(os.getcwd())
-        self.dir_elements['label'] = Label(self.frame, text='Save in', width=LABEL_WIDTH)
-        self.dir_elements['field'] = Entry(self.frame, textvariable=self.stringvars.get('directory'), width=ENTRY_WIDTH)
-        self.dir_elements['button'] = Button(self.frame, text='Browse', command=self._browse_dir, width=10)
+        self.dir_elements['label'] = tk.Label(self.frame, text='Save in', width=LABEL_WIDTH)
+        self.dir_elements['field'] = tk.Entry(self.frame, textvariable=self.stringvars.get('directory'), width=ENTRY_WIDTH)
+        self.dir_elements['button'] = tk.Button(self.frame, text='Browse', command=self._browse_dir, width=10)
 
     def _build(self):
-        self.res_elements['label'].grid(column=0, row=1, sticky=W, padx=10, pady=15)
-        self.res_elements['button'].grid(column=1, row=1, sticky=W)
+        self.res_elements['label'].grid(column=0, row=1, sticky=tk.W, padx=10, pady=15)
+        self.res_elements['button'].grid(column=1, row=1, sticky=tk.W)
 
-        self.dir_elements['label'].grid(column=0, row=2, sticky=W, padx=10, pady=15)
-        self.dir_elements['field'].grid(column=1, row=2, sticky=W)
-        self.dir_elements['button'].grid(column=2, row=2, sticky=W, padx=5)
+        self.dir_elements['label'].grid(column=0, row=2, sticky=tk.W, padx=10, pady=15)
+        self.dir_elements['field'].grid(column=1, row=2, sticky=tk.W)
+        self.dir_elements['button'].grid(column=2, row=2, sticky=tk.W, padx=5)
 
     def get_resolution(self):
         return self.stringvars.get('resolution').get()
@@ -138,8 +142,8 @@ class VideoTab:
         self.url_elements = {}
         self.rename_file_elements = {}
         self.stringvars = {
-            'url' : StringVar(),
-            'filename' : StringVar()
+            'url' : tk.StringVar(),
+            'filename' : tk.StringVar()
         }
         self._generate_download_button()
         self._generate_rename_file_elements()
@@ -147,35 +151,34 @@ class VideoTab:
         self._build()
 
     def _generate_url_elements(self):
-        self.url_elements['label'] = Label(self.frame, text='Video URL', width=LABEL_WIDTH)
-        self.url_elements['field'] = Entry(self.frame, width=ENTRY_WIDTH, textvariable=self.stringvars['url'])
+        self.url_elements['label'] = tk.Label(self.frame, text='Video URL', width=LABEL_WIDTH)
+        self.url_elements['field'] = tk.Entry(self.frame, width=ENTRY_WIDTH, textvariable=self.stringvars['url'])
 
     def _generate_rename_file_elements(self):
-        self.rename_file_elements['label'] = Label(self.frame, text='Rename file as', width=LABEL_WIDTH)
-        self.rename_file_elements['field'] = Entry(self.frame, width=ENTRY_WIDTH, textvariable=self.stringvars.get('filename'))
+        self.rename_file_elements['label'] = tk.Label(self.frame, text='Rename file as', width=LABEL_WIDTH)
+        self.rename_file_elements['field'] = tk.Entry(self.frame, width=ENTRY_WIDTH, textvariable=self.stringvars.get('filename'))
 
     def _generate_download_button(self):
-        self.dl_button = Button(self.frame, text='DOWNLOAD', bg=DOWNLOAD_BUTTON_COLOR, height=DOWNLOAD_BUTTON_HEIGHT, width=DOWNLOAD_BUTTON_WIDTH, command=self._start_video_download)
+        self.dl_button = tk.Button(self.frame, text='DOWNLOAD', bg=DOWNLOAD_BUTTON_COLOR, height=DOWNLOAD_BUTTON_HEIGHT, width=DOWNLOAD_BUTTON_WIDTH, command=self._start_video_download)
 
     def _start_video_download(self):
-        thread = threading.Thread(target=self.download)
+        thread = Thread(target=self.download)
         thread.start()
 
     def _build(self):
-        self.url_elements.get('label').grid(column=0, row=0, sticky=W, padx=10, pady=15)
-        self.url_elements.get('field').grid(column=1, row=0, sticky=W)
+        self.url_elements.get('label').grid(column=0, row=0, sticky=tk.W, padx=10, pady=15)
+        self.url_elements.get('field').grid(column=1, row=0, sticky=tk.W)
 
-        self.rename_file_elements.get('label').grid(column=0, row=1, sticky=W, padx=10)
-        self.rename_file_elements.get('field').grid(column=1, row=1, sticky=W)
+        self.rename_file_elements.get('label').grid(column=0, row=1, sticky=tk.W, padx=10)
+        self.rename_file_elements.get('field').grid(column=1, row=1, sticky=tk.W)
         
         self.dl_button.grid(column=1, row=2, pady=10)
 
     def download(self):
         progress_bar = ProgressBar(self.root)
-        filename = self.stringvars['filename'].get()
-        url = self.validate.validate_url(self.stringvars['url'].get())
+        filename = self.stringvars['filename'].get()        
         downloader = VideoDownloader(
-            url=url, 
+            url=self.stringvars['url'].get(), 
             save_directory=self.validate.validate_save_directory(self.options.get_save_dir(), []),
             resolution=self.options.get_resolution(),
             )
@@ -186,6 +189,7 @@ class VideoTab:
         try:
             downloader.download_video()
         except exceptions.RegexMatchError:
+            progress_bar.kill()
             return Messages().invalid_video_url()
         progress_bar.kill()
         self.messages.download_complete()
@@ -204,9 +208,9 @@ class ChannelTab:
         self.keyword_elements = {}
         self.timeframe_elements = {}
         self.stringvars = {
-            'channel name' : StringVar(),
-            'timeframe' : StringVar(),
-            'keywords' : StringVar()
+            'channel name' : tk.StringVar(),
+            'timeframe' : tk.StringVar(),
+            'keywords' : tk.StringVar()
             }
         self.timeframe_options = {
             'Day' : 1,
@@ -223,38 +227,38 @@ class ChannelTab:
         self._build()
 
     def _generate_channel_name_elements(self):
-        self.channel_name_elements['label'] = Label(self.frame, text='Channel name', width=LABEL_WIDTH)
-        self.channel_name_elements['field'] = Entry(self.frame, width=ENTRY_WIDTH, textvariable=self.stringvars['channel name'])
+        self.channel_name_elements['label'] = tk.Label(self.frame, text='Channel name', width=LABEL_WIDTH)
+        self.channel_name_elements['field'] = tk.Entry(self.frame, width=ENTRY_WIDTH, textvariable=self.stringvars['channel name'])
         
     def _generate_keyword_elements(self):
-        self.keyword_elements['label'] = Label(self.frame, text='Keywords', width=LABEL_WIDTH)
-        self.keyword_elements['field'] = Entry(self.frame, width=ENTRY_WIDTH, textvariable=self.stringvars['keywords'])
+        self.keyword_elements['label'] = tk.Label(self.frame, text='Keywords', width=LABEL_WIDTH)
+        self.keyword_elements['field'] = tk.Entry(self.frame, width=ENTRY_WIDTH, textvariable=self.stringvars['keywords'])
 
     def _generate_timeframe_elements(self):
-        self.timeframe_elements['label'] = Label(self.frame, text='Within the past', width=LABEL_WIDTH)
+        self.timeframe_elements['label'] = tk.Label(self.frame, text='Within the past', width=LABEL_WIDTH)
         self.stringvars['timeframe'].set('All Time')
-        self.timeframe_elements['menu'] = OptionMenu(self.frame, self.stringvars['timeframe'], *self.timeframe_options)
+        self.timeframe_elements['menu'] = tk.OptionMenu(self.frame, self.stringvars['timeframe'], *self.timeframe_options)
 
     def _generate_download_button(self):
-        self.dl_button = Button(self.frame, text='DOWNLOAD', bg=DOWNLOAD_BUTTON_COLOR, height=DOWNLOAD_BUTTON_HEIGHT, width=DOWNLOAD_BUTTON_WIDTH, command=self._start_channel_download)
+        self.dl_button = tk.Button(self.frame, text='DOWNLOAD', bg=DOWNLOAD_BUTTON_COLOR, height=DOWNLOAD_BUTTON_HEIGHT, width=DOWNLOAD_BUTTON_WIDTH, command=self._start_channel_download)
 
     def _start_channel_download(self):
         '''Starts a new thread for channel download.'''
-        thread = threading.Thread(target=self.download_channel)
+        thread = Thread(target=self.download_channel)
         thread.start()
 
     def _build(self):
         '''Places all the elements in the grid. Seperated from instancing for better overview.'''
-        self.channel_name_elements['label'].grid(column=0, row=1, sticky=W, padx=10, pady=15)
-        self.channel_name_elements['field'].grid(column=1, row=1, sticky=W)
+        self.channel_name_elements['label'].grid(column=0, row=1, sticky=tk.W, padx=10, pady=15)
+        self.channel_name_elements['field'].grid(column=1, row=1, sticky=tk.W)
 
-        self.timeframe_elements['label'].grid(column=0, row=3, sticky=EW, padx=10, pady=20)
+        self.timeframe_elements['label'].grid(column=0, row=3, sticky=tk.EW, padx=10, pady=20)
         self.timeframe_elements['menu'].grid(column=1, row=3)
 
-        self.keyword_elements['label'].grid(column=0, row=4, sticky=EW, padx=10, pady=20)
+        self.keyword_elements['label'].grid(column=0, row=4, sticky=tk.EW, padx=10, pady=20)
         self.keyword_elements['field'].grid(column=1, row=4)
 
-        self.dl_button.grid(column=1, row=5, pady=20, padx=10, sticky=EW)
+        self.dl_button.grid(column=1, row=5, pady=20, padx=10, sticky=tk.EW)
 
     def video_within_timeframe(self, video: YouTube):
         '''
@@ -365,19 +369,19 @@ class ChannelTab:
 class PlaylistTab:
     def __init__(self, app: App, options: OptionsTab) -> None:
         self.root = app.root
-        self.url_frame = Frame(app.tabs.get('Playlist'), width=WINDOW_WIDTH, height=WINDOW_HEIGHT/2)
-        self.playlist_frame = Frame(app.tabs.get('Playlist'), width=WINDOW_WIDTH, height=WINDOW_HEIGHT/2)
+        self.url_frame = tk.Frame(app.tabs.get('Playlist'), width=WINDOW_WIDTH, height=WINDOW_HEIGHT/2)
+        self.playlist_frame = tk.Frame(app.tabs.get('Playlist'), width=WINDOW_WIDTH, height=WINDOW_HEIGHT/2)
         self.validate = Validate() 
         self.messages = Messages()
         self.output_filename = None
-        self.a_tags = None
+        self.temp_playlist_data = []
         self.url_elements = {}
         self.channel_elements = {}
         self.playlist_elements = {}
         self.stringvars = {
-            'url' : StringVar(),
-            'channel name' : StringVar(),
-            'playlist name' : StringVar()
+            'url' : tk.StringVar(),
+            'channel name' : tk.StringVar(),
+            'playlist name' : tk.StringVar()
             }
         self.timeframe_options = {
             'Day' : 1,
@@ -392,18 +396,18 @@ class PlaylistTab:
         self._build()
 
     def _generate_url_elements(self):
-        self.url_elements['label'] = Label(self.url_frame, text='Playlist URL', width=LABEL_WIDTH)
-        self.url_elements['field'] = Entry(self.url_frame, width=ENTRY_WIDTH, textvariable=self.stringvars['url'])
-        self.url_elements['button'] = Button(self.url_frame, text='DOWNLOAD', bg=DOWNLOAD_BUTTON_COLOR, height=DOWNLOAD_BUTTON_HEIGHT, width=DOWNLOAD_BUTTON_WIDTH, command=self._start_playlist_download)
+        self.url_elements['label'] = tk.Label(self.url_frame, text='Playlist URL', width=LABEL_WIDTH)
+        self.url_elements['field'] = tk.Entry(self.url_frame, width=ENTRY_WIDTH, textvariable=self.stringvars['url'])
+        self.url_elements['button'] = tk.Button(self.url_frame, text='DOWNLOAD', bg=DOWNLOAD_BUTTON_COLOR, height=DOWNLOAD_BUTTON_HEIGHT, width=DOWNLOAD_BUTTON_WIDTH, command=self._start_playlist_download)
 
     def _generate_channel_name_elements(self):
-        self.channel_elements['label'] = Label(self.playlist_frame, text='Channel name', width=LABEL_WIDTH)
-        self.channel_elements['field'] = Entry(self.playlist_frame, width=ENTRY_WIDTH, textvariable=self.stringvars['channel name'])
+        self.channel_elements['label'] = tk.Label(self.playlist_frame, text='Channel name', width=LABEL_WIDTH)
+        self.channel_elements['field'] = tk.Entry(self.playlist_frame, width=ENTRY_WIDTH, textvariable=self.stringvars['channel name'])
    
     def _generate_playlist_name_elements(self):
-        self.playlist_elements['label'] = Label(self.playlist_frame, text='Playlist name', width=LABEL_WIDTH)
-        self.playlist_elements['field'] = Entry(self.playlist_frame, width=ENTRY_WIDTH, textvariable=self.stringvars['playlist name'])
-        self.playlist_elements['button'] = Button(self.playlist_frame, text='DOWNLOAD', bg=DOWNLOAD_BUTTON_COLOR, height=DOWNLOAD_BUTTON_HEIGHT, width=DOWNLOAD_BUTTON_WIDTH, command=self._start_channel_playlist_download)
+        self.playlist_elements['label'] = tk.Label(self.playlist_frame, text='Playlist name', width=LABEL_WIDTH)
+        self.playlist_elements['field'] = tk.Entry(self.playlist_frame, width=ENTRY_WIDTH, textvariable=self.stringvars['playlist name'])
+        self.playlist_elements['button'] = tk.Button(self.playlist_frame, text='DOWNLOAD', bg=DOWNLOAD_BUTTON_COLOR, height=DOWNLOAD_BUTTON_HEIGHT, width=DOWNLOAD_BUTTON_WIDTH, command=self._start_channel_playlist_download)
 
     def _validate_channel_name(self, channel_name: str):
         '''
@@ -414,18 +418,24 @@ class PlaylistTab:
 
     def _start_playlist_download(self):
         '''Starts a new thread for channel download.'''
-        thread = threading.Thread(target=self.download_playlist)
+        if self.stringvars['url'].get() == '':
+            self.messages.invalid_playlist_url()
+            return
+        thread = Thread(target=self.download_playlist)
         thread.start()
 
     def _start_channel_playlist_download(self):
         '''Starts a new thread for channel download.'''
         if self.stringvars['channel name'].get() == '':
             self.messages.invalid_channel_name()
-        user_accept = self.messages.unstable_warning()
+            return 
+        elif self.stringvars['playlist name'] == '':
+            self.messages.invalid_playlist_name()
+            return 
+        user_accept = self.messages.process_time_warning()
         if not user_accept:
             return
-        self._get_playlist_atags()
-        thread = threading.Thread(target=self.download_channel_playlist)
+        thread = Thread(target=self.download_channel_playlist)
         thread.start()
 
     def _build(self):
@@ -433,23 +443,30 @@ class PlaylistTab:
         self.url_frame.grid(columnspan=3)
         self.playlist_frame.grid(columnspan=3)
 
-        self.url_elements['label'].grid(column=0, row=0, sticky=W, padx=10, pady=15)
-        self.url_elements['field'].grid(column=1, row=0, sticky=W)
+        self.url_elements['label'].grid(column=0, row=0, sticky=tk.W, padx=10, pady=15)
+        self.url_elements['field'].grid(column=1, row=0, sticky=tk.W)
         self.url_elements['button'].grid(column=1, row=1, pady=10)
      
-        self.channel_elements['label'].grid(column=0, row=0, sticky=W, padx=10, pady=15)
-        self.channel_elements['field'].grid(column=1, row=0, sticky=W)
+        self.channel_elements['label'].grid(column=0, row=0, sticky=tk.W, padx=10, pady=15)
+        self.channel_elements['field'].grid(column=1, row=0, sticky=tk.W)
 
-        self.playlist_elements['label'].grid(column=0, row=1, sticky=W, padx=10, pady=15)
-        self.playlist_elements['field'].grid(column=1, row=1, sticky=W)
+        self.playlist_elements['label'].grid(column=0, row=1, sticky=tk.W, padx=10, pady=15)
+        self.playlist_elements['field'].grid(column=1, row=1, sticky=tk.W)
         self.playlist_elements['button'].grid(column=1, row=2, pady=10)
 
-    def _get_playlist_atags(self):
-        with HTMLSession() as session:
-            response = session.get(f"https://www.youtube.com/c/{self.stringvars['channel name'].get()}/playlists")
-            response.html.render(sleep=1, timeout=100)
-            self.a_tags = response.html.find('a#video-title')
-        
+    def _get_playlist_data(self):
+        url = f"https://www.youtube.com/c/{self.stringvars['channel name'].get()}/playlists"
+        playlist_data = []
+        with helium.start_firefox(url, headless=True) as browser:
+            if browser.current_url.startswith('https://consent.youtube.com'):
+                helium.press(helium.PAGE_DOWN)
+                helium.click(helium.Button("I agree"))
+            sleep(10)
+            soup = BeautifulSoup(browser.page_source, 'html.parser')
+            for a_tag in soup.find_all('a', id='video-title'):
+                playlist_data.append([a_tag.attrs['title'], a_tag.attrs['href']])
+        return playlist_data
+
     def _generate_playlists(self):
         playlists = []
         for a_tag in self.a_tags:
@@ -469,15 +486,20 @@ class PlaylistTab:
     def find_playlist(self):
         '''Returns the Playlist object of it matches the playlist name, the user is looking for.'''
         playlist_name = self.stringvars['playlist name'].get()
-        playlists = self._generate_playlists()
+        playlist_data = self._get_playlist_data()
 
-        for playlist in playlists:
-            if playlist_name.lower() == playlist.title.lower():
-                return playlist 
+        for playlist in playlist_data:
+            title = playlist[0]
+            href = playlist[1]
+            if playlist_name.lower() == title.lower():
+                return Playlist(href) 
         else:
             # if no 100% match, look for 85%+ matches
-            for playlist in playlists:
-                if self._similar(playlist_name.lower(), playlist.title.lower()) >= 0.85:
+            for playlist in playlist_data:
+                title = playlist[0]
+                href = playlist[1]
+                if self._similar(playlist_name.lower(), title.lower()) >= 0.85:
+                    playlist = Playlist(href)
                     accept_suggestion = self._suggest_playlist(playlist)
                     if accept_suggestion:
                         return playlist
@@ -490,8 +512,9 @@ class PlaylistTab:
         playlist = Playlist(self.stringvars['url'].get())
 
         progress_bar.update_status('Finding videos in playlist')
-        if len(playlist.videos) == 0:
+        if len(playlist.videos) == 0 or playlist._html is None:
             self.messages.invalid_playlist_url()
+            progress_bar.kill()
             return
 
         for index, video in enumerate(playlist.videos):
@@ -520,7 +543,7 @@ class PlaylistTab:
             return
         
         for index, video in enumerate(relevant_playlist.videos):
-            progress_bar.update_status_downloading(index, len(playlist.videos))
+            progress_bar.update_status_downloading(index, len(relevant_playlist.videos))
             downloader = VideoDownloader(
                 url=video.watch_url, 
                 resolution=options.get_resolution(), 
@@ -540,18 +563,18 @@ class AboutTab:
         self.root = app.root
         self.messages = Messages()
         self.stringvars = {
-            'about' : StringVar(),
-            'filename' : StringVar()
+            'about' : tk.StringVar(),
+            'filename' : tk.StringVar()
         }
         self.elements = {}
         self._generate_elements()
         self._build()
     
     def _generate_elements(self):
-        self.elements['about'] = Label(self.frame, text='About')
-        self.elements['disclaimer'] = Label(self.frame, text='This software is only for educational use.\nThe author takes no responsibility for downloading unauthorized content.')
-        self.elements['github'] = Label(self.frame, text='Github', fg="blue", cursor="hand2")
-        self.elements['license'] = Label(self.frame, text='License', fg="blue", cursor="hand2")
+        self.elements['about'] = tk.Label(self.frame, text='About')
+        self.elements['disclaimer'] = tk.Label(self.frame, text='This software is only for educational use.\nThe author takes no responsibility for downloading unauthorized content.')
+        self.elements['github'] = tk.Label(self.frame, text='Github', fg="blue", cursor="hand2")
+        self.elements['license'] = tk.Label(self.frame, text='License', fg="blue", cursor="hand2")
 
     def _open_hyperlink(self, url: str):
         webbrowser.open_new(url)
@@ -566,27 +589,27 @@ class AboutTab:
 
 
 class ProgressBar:
-    def __init__(self, root: Tk) -> None:
-        self.top = Toplevel(root)
-        self.video_name = StringVar()
-        self.status = StringVar()
-        self.download_percentage = StringVar()
+    def __init__(self, root: tk.Tk) -> None:
+        self.top = tk.Toplevel(root)
+        self.video_name = tk.StringVar()
+        self.status = tk.StringVar()
+        self.download_percentage = tk.StringVar()
         
         self._setup_window()
-        self.bar = ttk.Progressbar(self.top, orient=HORIZONTAL, length=100, mode='determinate')
-        self.video_name_label = Label(self.top, textvariable=self.video_name)
-        self.status_label = Label(self.top, textvariable=self.status)
-        self.download_percentage_label = Label(self.top, textvariable=self.download_percentage)
+        self.bar = ttk.Progressbar(self.top, orient=tk.HORIZONTAL, length=100, mode='determinate')
+        self.video_name_label = tk.Label(self.top, textvariable=self.video_name)
+        self.status_label = tk.Label(self.top, textvariable=self.status)
+        self.download_percentage_label = tk.Label(self.top, textvariable=self.download_percentage)
         self.update_status('Getting ready...')
         self._update_download_percent(0.0)
-        self.cancel_button = Button(self.top, text='Cancel', command=self.top.destroy)
+        self.cancel_button = tk.Button(self.top, text='Cancel', command=self.top.destroy)
         self._build()
     
     def _build(self):
-        self.video_name_label.pack(expand=True, fill='both', pady=5, padx=10, anchor=NW)
-        self.status_label.pack(expand=True, fill='both', pady=5, padx=10, anchor=N)
+        self.video_name_label.pack(expand=True, fill='both', pady=5, padx=10, anchor=tk.NW)
+        self.status_label.pack(expand=True, fill='both', pady=5, padx=10, anchor=tk.N)
         self.bar.pack(expand=True, pady=10, fill='both', padx=15)
-        self.download_percentage_label.pack(expand=True, fill='both', pady=5, padx=10, anchor=N)
+        self.download_percentage_label.pack(expand=True, fill='both', pady=5, padx=10, anchor=tk.N)
         self.cancel_button.pack(expand=True, pady=15)
 
     def _setup_window(self):
@@ -699,7 +722,7 @@ class VideoDownloader:
             # The resolution wanted, was not available. Reducing to the next available resolution and retry.
             self.resolution = Resolution().downgrade(self.resolution)
             self.download_video()
-        except TclError:
+        except tk._tkinter.TclError:
             # Download was stopped unexpectedly (probably manually)
             # Delete current file, as the download is incomplete
             Messages().download_stopped()
@@ -714,7 +737,7 @@ class Messages:
     
     def no_videos_found(self):
         t = 'No videos'
-        m = 'Could not find any new videos matching the requirements'
+        m = 'Could not find any videos matching the requirements'
         return messagebox.showerror(title=t, message=m)
     
     def download_stopped(self):
@@ -742,20 +765,24 @@ class Messages:
         m = 'Channel playlists not found'
         return messagebox.showerror(title=t, message=m)
 
+    def invalid_playlist_name(self):
+        t = 'Invalid playlist name'
+        m = 'Please enter a valid playlist name'
+        return messagebox.showerror(title=t, message=m)
+
     def invalid_video_url(self):
         t = 'Invalid URL'
         m = 'Please enter a valid YouTube URL'
-        return messagebox.showerror(title=t, message=t)
-
+        return messagebox.showerror(title=t, message=m)
 
     def invalid_save_dir(self):
         t = 'Invalid directory'
         m = 'Please enter a valid save directory'
         return messagebox.showerror(title=t, message=m)
 
-    def unstable_warning(self):
-        t = 'Unstable'
-        m = 'WARNING!\nThis method is slow and prone to crashes.\n\nIt is highly recommended to use the playlist URLfunction instead.\n\nDo you want to continue anyways?'
+    def process_time_warning(self):
+        t = 'Process time warning'
+        m = 'WARNING!\n\nThis method is very slow.\nIt is highly recommended to use the playlist URL function instead.\n\nDo you want to continue anyways?'
         return messagebox.askyesno(title=t, message=m)
 
     def suggest_playlist(self, playlist: Playlist):
@@ -780,7 +807,6 @@ class Validate:
         path = Path(base_save_dir).joinpath(validated_subfolders)
         path.mkdir(parents=True, exist_ok=True)
         return path
-
     
     def validate_channel_name(self, channel_name: str):
         '''
@@ -790,13 +816,8 @@ class Validate:
         return channel_name.replace(' ', '').strip()
 
 
-    def validate_url(self, url: str):
-        if url == '' or url is None:
-            return Messages().invalid_video_url()
-        return url
 
-
-root = Tk()
+root = tk.Tk()
 app = App(root)
 
 options = OptionsTab(app)
