@@ -39,8 +39,8 @@ pip install pytube
 <br/>
 
 ### **Standalone executable**
-Build a standalone executable with PyInstaller: ```python pip install pyinstaller```
-Run the following command from project folder ```pyinstaller --onefile --noconsole -n "MyTube" --icon "icon.ico" --add-data "icon.ico;." --collect-all "helium"  mytube_app.py```
+Build a standalone executable with PyInstaller:```pip install pyinstaller```<br/>
+Run the following command from project folder<br/> ```pyinstaller --onefile --noconsole -n "MyTube" --icon "icon.ico" --add-data "icon.ico;." --collect-all "helium"  mytube_app.py```
 
 <br/>
 
