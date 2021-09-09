@@ -48,7 +48,7 @@ Run the following command from project folder<br/> ```pyinstaller --onefile --no
 
 <br/>
 
-### **Troubleshooting**
+## **Troubleshooting**
 This project relies heavily on PyTube.<br/>
 Make sure pytube is updated: ```pip install pytube --upgrade```
 
