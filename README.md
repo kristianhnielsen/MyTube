@@ -39,7 +39,7 @@ pip install pytube
 <br/>
 
 ### **Standalone executable**
-Build a standalone executable with PyInstaller:```pip install pyinstaller```<br/>
+Build a standalone executable with PyInstaller: ```pip install pyinstaller```<br/>
 Run the following command from project folder<br/> ```pyinstaller --onefile --noconsole -n "MyTube" --icon "icon.ico" --add-data "icon.ico;." --collect-all "helium"  mytube_app.py```
 
 <br/>
@@ -49,8 +49,8 @@ Run the following command from project folder<br/> ```pyinstaller --onefile --no
 <br/>
 
 ### **Troubleshooting**
-This project relies heavily on PyTube. Make sure pytube is updated. 
-Other dependencies might also contribute to issues.
+This project relies heavily on PyTube.<br/>
+Make sure pytube is updated: ```pip install pytube --upgrade```
 
 <br/>
 
