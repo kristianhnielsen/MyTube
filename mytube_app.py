@@ -1,17 +1,19 @@
-from datetime import datetime
 import re
+import os
+import sys
+import webbrowser
+from time import sleep
+from threading import Thread
+from datetime import datetime
+from pathlib import Path
+from difflib import SequenceMatcher
+from urllib.error import HTTPError
 import tkinter as tk
 from tkinter import ttk, messagebox
-from urllib.error import HTTPError
-import webbrowser
 from tkinter.filedialog import askdirectory
-import os
-from threading import Thread
-from difflib import SequenceMatcher
-from pathlib import Path
+
 import helium
 from bs4 import BeautifulSoup
-from time import sleep
 from pytube import Playlist, YouTube, Channel, request, exceptions
 
 WINDOW_HEIGHT = 300
@@ -22,6 +24,18 @@ ENTRY_WIDTH = 40
 DOWNLOAD_BUTTON_COLOR = 'lightgray'
 DOWNLOAD_BUTTON_WIDTH = 18
 DOWNLOAD_BUTTON_HEIGHT = 1
+
+def resource_path(relative_path: str):
+        """ Get absolute path to resource, works for dev and for PyInstaller """
+        # Solution to PyInstaller not finding iconbitmap, and causes crash.
+        # Copied from: https://stackoverflow.com/questions/7674790/bundling-data-files-with-pyinstaller-onefile/13790741#13790741
+        try:
+            # PyInstaller creates a temp folder and stores path in _MEIPASS
+            base_path = sys._MEIPASS
+        except Exception:
+            base_path = os.path.abspath(".")
+
+        return os.path.join(base_path, relative_path)
 
 class Resolution:
     def __init__(self) -> None:
@@ -51,6 +65,10 @@ class App:
             'dir' : ''
         }
         self._build_tabs()
+        self.set_icon('icon.ico')
+
+    def set_icon(self, icon_path: str):
+        self.root.iconbitmap(resource_path(icon_path))
 
     def _tabs_setup(self):
         self.notebook = ttk.Notebook(self.root)
@@ -169,7 +187,7 @@ class VideoTab:
             save_directory=self.validate.validate_save_directory(self.options.get_save_dir(), []),
             resolution=self.options.get_resolution(),
             )
-        progress_bar.update_status_downloading(1, 1)
+        progress_bar.update_status_downloading(0, 1)
         downloader.set_progress_bar(progress_bar)
         downloader.set_output_filename(filename)
         downloader.add_resolution_prefix()
@@ -177,7 +195,11 @@ class VideoTab:
             downloader.download_video()
         except exceptions.RegexMatchError:
             progress_bar.kill()
-            return Messages().invalid_video_url()
+            self.messages.invalid_video_url()
+            return 
+        except RuntimeError:
+            progress_bar.kill()
+            return
         progress_bar.kill()
         self.messages.download_complete()
 
@@ -347,7 +369,11 @@ class ChannelTab:
                 )
             downloader.set_progress_bar(progress_bar)
             downloader.add_resolution_prefix()
-            downloader.download_video()
+            try:
+                downloader.download_video()
+            except RuntimeError:
+                progress_bar.kill()
+                return
         
         progress_bar.kill()
         self.messages.download_complete()
@@ -513,8 +539,12 @@ class PlaylistTab:
                 )
             downloader.set_progress_bar(progress_bar)
             downloader.add_resolution_prefix()
-            downloader.download_video()
-        
+            try:
+                downloader.download_video()
+            except RuntimeError:
+                progress_bar.kill()
+                return
+
         progress_bar.kill()
         self.messages.download_complete()
     
@@ -538,7 +568,11 @@ class PlaylistTab:
                 )
             downloader.set_progress_bar(progress_bar)
             downloader.add_resolution_prefix()
-            downloader.download_video()
+            try:
+                downloader.download_video()
+            except RuntimeError:
+                progress_bar.kill()
+                return
         
         progress_bar.kill()
         self.messages.download_complete()
@@ -591,6 +625,7 @@ class ProgressBar:
         self._update_download_percent(0.0)
         self.cancel_button = tk.Button(self.top, text='Cancel', command=self.top.destroy)
         self._build()
+        self.top.iconbitmap(resource_path('icon.ico'))
     
     def _build(self):
         self.video_name_label.pack(expand=True, fill='both', pady=5, padx=10, anchor=tk.NW)
@@ -714,6 +749,7 @@ class VideoDownloader:
             # Delete current file, as the download is incomplete
             Messages().download_stopped()
             os.unlink(stream.get_file_path(output_path=self.save_directory, filename_prefix=prefix))
+            raise RuntimeError('Download stopped unexpectedly')
 
 
 class Messages:
