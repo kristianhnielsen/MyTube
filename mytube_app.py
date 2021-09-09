@@ -16,6 +16,9 @@ import helium
 from bs4 import BeautifulSoup
 from pytube import Playlist, YouTube, Channel, request, exceptions
 
+# PyInstaller command for extraction purposes:
+# pyinstaller --onefile --noconsole --icon "icon.ico" --add-data "icon.ico;." --collect-all "helium"  mytube_app.py
+
 WINDOW_HEIGHT = 300
 WINDOW_WIDTH = 500
 LABEL_WIDTH = 15
