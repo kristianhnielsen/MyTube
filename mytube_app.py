@@ -647,10 +647,7 @@ class ProgressBar:
         self.video_name.set(name)
 
     def update_status_downloading(self, item_num: int, total_item_num: int):
-        if self.download_percentage.get() == "100%":
-            self.update_status('Download complete\nPreparing for the next download!')
-        else:  
-            self.update_status(f'Downloading video {item_num + 1} of {total_item_num}')
+        self.update_status(f'Downloading video {item_num + 1} of {total_item_num}')
 
     def update_status(self, new_status: str):
         self.status.set(new_status)
